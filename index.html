@@ -4,96 +4,192 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        height: 100vh;
-        margin: 0;
         flex-direction: column;
+        font-family: Arial, sans-serif;
     }
 
-    input {
-        width: calc(32px*3);
-        margin: 0 8px 0 24px;
-        font-size: 300%;
+    input,
+    textarea {
+        margin: 8px;
+    }
+
+    input[type="number"] {
+        width: 80px;
+        font-size: 100%;
         text-align: right;
     }
 
     button {
         margin: 24px;
+        padding: 8px 16px;
+        font-size: 120%;
+    }
+
+    textarea {
+        width: 300px;
+        height: 100px;
+        font-size: 100%;
+        resize: none;
     }
 </style>
 
 <body>
+    <textarea id="memo" placeholder="Enter your notes here..."></textarea>
+    <div>
+        <span>Memo Font Size: </span><input id="memoFontSize" type="number" min="10" value="14">px
+    </div>
+    <div>
+        <span>Timer Font Size: </span><input id="timerFontSize" type="number" min="10" value="20">px
+    </div>
+    <div>
+        <span>Background Color: </span><input id="bgColor" type="color" value="#36454f">
+    </div>
     <div>
         <input id="days" min=0 type="number" value=0>d
         <input id="hours" min=0 type="number" value=0>h
         <input id="minutes" min=0 type="number" value=0>m
         <input id="seconds" min=0 type="number" value=15>s
     </div>
-    <button id="button">start</button>
+    <button id="button">Start</button>
+
+    <script>
+        const canvas = document.createElement('canvas');
+        canvas.width = 300;
+        canvas.height = 200;
+        const ctx = canvas.getContext('2d', { alpha: false });
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const video = document.createElement('video');
+        document.body.appendChild(canvas); // Append canvas to ensure PIP stream
+
+        // Load saved memo content
+        const savedMemo = localStorage.getItem('memoContent');
+        if (savedMemo) {
+            document.getElementById('memo').value = savedMemo;
+        }
+
+        const params = new URLSearchParams(location.search);
+        if (params.has('autoplay')) {
+            video.autoplay = true;
+            video.srcObject = canvas.captureStream();
+        } else if (params.has('autoplay-muted')) {
+            video.autoplay = true;
+            video.muted = true;
+            video.srcObject = canvas.captureStream();
+        } else {
+            video.srcObject = canvas.captureStream();
+            video.muted = true;
+            video.play();
+        }
+
+        button.addEventListener('click', async function () {
+            if (document.pictureInPictureEnabled) {
+                video.requestPictureInPicture();
+            } else {
+                video.play();
+                const endTime = new Date();
+                endTime.setSeconds(endTime.getSeconds() +
+                    (days.valueAsNumber * 86400) +
+                    (hours.valueAsNumber * 3600) +
+                    (minutes.valueAsNumber * 60) +
+                    seconds.valueAsNumber);
+                drawCanvasRemainingTime(endTime);
+                video.webkitSetPresentationMode('picture-in-picture');
+            }
+        });
+
+        video.addEventListener('enterpictureinpicture', event => {
+            updateCanvasSize(event.pictureInPictureWindow);
+            event.pictureInPictureWindow.onresize = event => updateCanvasSize(event.target);
+            const endTime = new Date();
+            endTime.setSeconds(endTime.getSeconds() +
+                (days.valueAsNumber * 86400) +
+                (hours.valueAsNumber * 3600) +
+                (minutes.valueAsNumber * 60) +
+                seconds.valueAsNumber);
+            drawCanvasRemainingTime(endTime);
+        });
+
+        function drawCanvasRemainingTime(endTime) {
+            const bgColor = document.getElementById('bgColor').value;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // Display remaining time at the top
+            const secondsLeft = Math.floor((endTime - new Date()) / 1000);
+            const daysLeft = Math.floor(secondsLeft / 86400);
+            const hoursLeft = Math.floor((secondsLeft % 86400) / 3600);
+            const minutesLeft = Math.floor((secondsLeft % 3600) / 60);
+            const secondsRemaining = secondsLeft % 60;
+
+            const timerFontSize = document.getElementById('timerFontSize').value;
+            ctx.font = 'bold ' + timerFontSize + 'px sans-serif';
+            const timeDisplay = `${daysLeft}d:${hoursLeft}h:${minutesLeft}m:${secondsRemaining}s`;
+            ctx.fillText(timeDisplay, canvas.width / 2, canvas.height / 8);
+
+            // New line height
+            const memoFontSize = document.getElementById('memoFontSize').value;
+            const lineHeight = memoFontSize * 1.2;  // Adjust line height based on font size
+
+            // Draw memo with word wrap and manual newline support
+            const memoText = document.getElementById('memo').value;
+            const memoLines = memoText.split('\n');
+
+            let y = canvas.height / 3;
+            ctx.textAlign = 'left';
+            ctx.font = memoFontSize + 'px sans-serif';
+
+            for (let line of memoLines) {
+                let words = line.split(' ');
+                let currentLine = '';
+
+                for (let word of words) {
+                    const testLine = currentLine + word + ' ';
+                    const metrics = ctx.measureText(testLine);
+                    const testWidth = metrics.width;
+
+                    if (testWidth > canvas.width - 20) {
+                        ctx.fillText(currentLine.trim(), 10, y);
+                        currentLine = word + ' ';
+                        y += lineHeight;
+
+                        // Stop drawing text if the height limit is reached
+                        if (y > canvas.height - 10) break;
+                    } else {
+                        currentLine = testLine;
+                    }
+                }
+
+                if (currentLine && y <= canvas.height - 10) {
+                    ctx.fillText(currentLine.trim(), 10, y);
+                    y += lineHeight;
+                }
+
+                // Check if there's room for another line; if not, break
+                if (y > canvas.height - 10) {
+                    break;
+                }
+            }
+
+            if (secondsLeft > 0) {
+                requestAnimationFrame(() => drawCanvasRemainingTime(endTime));
+            }
+        }
+
+        function updateCanvasSize(pictureInPictureWindow) {
+            canvas.width = pictureInPictureWindow.width * devicePixelRatio;
+            canvas.height = pictureInPictureWindow.height * devicePixelRatio;
+        }
+
+        // Save memo content when it is modified
+        document.getElementById('memo').addEventListener('input', function () {
+            localStorage.setItem('memoContent', this.value);
+        });
+
+    </script>
 </body>
-<script>
-    const canvas = document.createElement('canvas');
-    canvas.width = 400; // Initial width
-    canvas.height = 200; // Initial height
-    const ctx = canvas.getContext('2d', { alpha: false });
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const video = document.createElement('video');
-    video.srcObject = canvas.captureStream();
-    video.muted = true;
-    video.play();
-
-    button.addEventListener('click', async function () {
-        if (document.pictureInPictureEnabled) {
-            await video.requestPictureInPicture();
-        }
-        const endTime = new Date();
-        endTime.setSeconds(endTime.getSeconds() +
-            (document.getElementById('days').valueAsNumber * 86400) +
-            (document.getElementById('hours').valueAsNumber * 3600) +
-            (document.getElementById('minutes').valueAsNumber * 60) +
-            document.getElementById('seconds').valueAsNumber);
-        drawCanvasRemainingTime(endTime);
-    });
-
-    video.addEventListener('enterpictureinpicture', event => {
-        updateCanvasSize(event.pictureInPictureWindow);
-        event.pictureInPictureWindow.onresize = event => updateCanvasSize(event.target);
-        const endTime = new Date();
-        endTime.setSeconds(endTime.getSeconds() +
-            (document.getElementById('days').valueAsNumber * 86400) +
-            (document.getElementById('hours').valueAsNumber * 3600) +
-            (document.getElementById('minutes').valueAsNumber * 60) +
-            document.getElementById('seconds').valueAsNumber);
-        drawCanvasRemainingTime(endTime);
-    });
-
-    function drawCanvasRemainingTime(endTime) {
-        ctx.fillStyle = '#9fa8a3';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        const secondsLeft = Math.floor((endTime - new Date()) / 1000);
-
-        const daysLeft = Math.floor(secondsLeft / 86400);
-        const hoursLeft = Math.floor((secondsLeft % 86400) / 3600);
-        const minutesLeft = Math.floor((secondsLeft % 3600) / 60);
-        const secondsRemaining = secondsLeft % 60;
-
-        // Adjust the content to fit into the PIP and dynamically scale font size
-        const timeDisplay = `${daysLeft}d:${hoursLeft}h:${minutesLeft}m:${secondsRemaining}s`;
-        ctx.font = (canvas.height / 10) + 'px sans-serif';
-        ctx.fillText(timeDisplay, canvas.width / 2, canvas.height / 2);
-
-        if (secondsLeft > 0) {
-            requestAnimationFrame(() => drawCanvasRemainingTime(endTime));
-        }
-    }
-
-    function updateCanvasSize(pictureInPictureWindow) {
-        // Update canvas to match Picture-in-Picture window dimensions
-        canvas.width = pictureInPictureWindow.width * devicePixelRatio;
-        canvas.height = pictureInPictureWindow.height * devicePixelRatio;
-    }
-</script>
