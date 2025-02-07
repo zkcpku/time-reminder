@@ -50,7 +50,8 @@
         <input id="minutes" min=0 type="number" value=0>m
         <input id="seconds" min=0 type="number" value=15>s
     </div>
-    <button id="button">Start</button>
+    <button id="startButton">Start</button>
+    <button id="togglePipButton">Toggle PiP</button>
 
     <script>
         const canvas = document.createElement('canvas');
@@ -97,25 +98,8 @@
             video.play();
         }
 
-        button.addEventListener('click', async function () {
-            if (document.pictureInPictureEnabled) {
-                video.requestPictureInPicture();
-            } else {
-                video.play();
-                const endTime = new Date();
-                endTime.setSeconds(endTime.getSeconds() +
-                    (days.valueAsNumber * 86400) +
-                    (hours.valueAsNumber * 3600) +
-                    (minutes.valueAsNumber * 60) +
-                    seconds.valueAsNumber);
-                drawCanvasRemainingTime(endTime);
-                video.webkitSetPresentationMode('picture-in-picture');
-            }
-        });
-
-        video.addEventListener('enterpictureinpicture', event => {
-            updateCanvasSize(event.pictureInPictureWindow);
-            event.pictureInPictureWindow.onresize = event => updateCanvasSize(event.target);
+        // Start button for the countdown
+        startButton.addEventListener('click', async function () {
             const endTime = new Date();
             endTime.setSeconds(endTime.getSeconds() +
                 (days.valueAsNumber * 86400) +
@@ -123,6 +107,26 @@
                 (minutes.valueAsNumber * 60) +
                 seconds.valueAsNumber);
             drawCanvasRemainingTime(endTime);
+        });
+
+        // Toggle Picture-in-Picture view
+        togglePipButton.addEventListener('click', async function () {
+            if (document.pictureInPictureElement) {
+                document.exitPictureInPicture();
+            } else {
+                if (canvas !== document.pictureInPictureElement) {
+                    try {
+                        await video.requestPictureInPicture();
+                    } catch (error) {
+                        console.error('Failed to enter Picture-in-Picture mode.', error);
+                    }
+                }
+            }
+        });
+
+        video.addEventListener('enterpictureinpicture', event => {
+            updateCanvasSize(event.pictureInPictureWindow);
+            event.pictureInPictureWindow.onresize = event => updateCanvasSize(event.target);
         });
 
         function drawCanvasRemainingTime(endTime) {
