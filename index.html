@@ -1,0 +1,99 @@
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+    body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+        flex-direction: column;
+    }
+
+    input {
+        width: calc(32px*3);
+        margin: 0 8px 0 24px;
+        font-size: 300%;
+        text-align: right;
+    }
+
+    button {
+        margin: 24px;
+    }
+</style>
+
+<body>
+    <div>
+        <input id="days" min=0 type="number" value=0>d
+        <input id="hours" min=0 type="number" value=0>h
+        <input id="minutes" min=0 type="number" value=0>m
+        <input id="seconds" min=0 type="number" value=15>s
+    </div>
+    <button id="button">start</button>
+</body>
+<script>
+    const canvas = document.createElement('canvas');
+    canvas.width = 400; // Initial width
+    canvas.height = 200; // Initial height
+    const ctx = canvas.getContext('2d', { alpha: false });
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const video = document.createElement('video');
+    video.srcObject = canvas.captureStream();
+    video.muted = true;
+    video.play();
+
+    button.addEventListener('click', async function () {
+        if (document.pictureInPictureEnabled) {
+            await video.requestPictureInPicture();
+        }
+        const endTime = new Date();
+        endTime.setSeconds(endTime.getSeconds() +
+            (document.getElementById('days').valueAsNumber * 86400) +
+            (document.getElementById('hours').valueAsNumber * 3600) +
+            (document.getElementById('minutes').valueAsNumber * 60) +
+            document.getElementById('seconds').valueAsNumber);
+        drawCanvasRemainingTime(endTime);
+    });
+
+    video.addEventListener('enterpictureinpicture', event => {
+        updateCanvasSize(event.pictureInPictureWindow);
+        event.pictureInPictureWindow.onresize = event => updateCanvasSize(event.target);
+        const endTime = new Date();
+        endTime.setSeconds(endTime.getSeconds() +
+            (document.getElementById('days').valueAsNumber * 86400) +
+            (document.getElementById('hours').valueAsNumber * 3600) +
+            (document.getElementById('minutes').valueAsNumber * 60) +
+            document.getElementById('seconds').valueAsNumber);
+        drawCanvasRemainingTime(endTime);
+    });
+
+    function drawCanvasRemainingTime(endTime) {
+        ctx.fillStyle = '#9fa8a3';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const secondsLeft = Math.floor((endTime - new Date()) / 1000);
+
+        const daysLeft = Math.floor(secondsLeft / 86400);
+        const hoursLeft = Math.floor((secondsLeft % 86400) / 3600);
+        const minutesLeft = Math.floor((secondsLeft % 3600) / 60);
+        const secondsRemaining = secondsLeft % 60;
+
+        // Adjust the content to fit into the PIP and dynamically scale font size
+        const timeDisplay = `${daysLeft}d:${hoursLeft}h:${minutesLeft}m:${secondsRemaining}s`;
+        ctx.font = (canvas.height / 10) + 'px sans-serif';
+        ctx.fillText(timeDisplay, canvas.width / 2, canvas.height / 2);
+
+        if (secondsLeft > 0) {
+            requestAnimationFrame(() => drawCanvasRemainingTime(endTime));
+        }
+    }
+
+    function updateCanvasSize(pictureInPictureWindow) {
+        // Update canvas to match Picture-in-Picture window dimensions
+        canvas.width = pictureInPictureWindow.width * devicePixelRatio;
+        canvas.height = pictureInPictureWindow.height * devicePixelRatio;
+    }
+</script>
