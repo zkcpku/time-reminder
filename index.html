@@ -7,24 +7,18 @@
         flex-direction: column;
         font-family: Arial, sans-serif;
     }
-
-    input,
-    textarea {
+    input, textarea {
         margin: 8px;
     }
-
-    input[type="number"],
-    input[type="color"] {
+    input[type="number"], input[type="color"] {
         width: 100px;
         font-size: 100%;
     }
-
     button {
-        margin: 24px;
+        margin: 8px;
         padding: 8px 16px;
         font-size: 120%;
     }
-
     textarea {
         width: 300px;
         height: 100px;
@@ -32,7 +26,6 @@
         resize: none;
     }
 </style>
-
 <body>
     <textarea id="memo" placeholder="Enter your notes here..."></textarea>
     <div>
@@ -51,6 +44,7 @@
         <input id="seconds" min=0 type="number" value=15>s
     </div>
     <button id="startButton">Start</button>
+    <button id="pauseResumeButton" disabled>Pause/Resume</button>
     <button id="togglePipButton">Toggle PiP</button>
 
     <script>
@@ -62,6 +56,11 @@
 
         const video = document.createElement('video');
         document.body.appendChild(canvas); // Append canvas to ensure PIP stream
+
+        let timerInterval = null;
+        let paused = false;
+        let remainingTimeInSeconds = 0;
+        let endTime = null;
 
         // Load and set saved settings
         function loadSettings() {
@@ -98,18 +97,23 @@
             video.play();
         }
 
-        // Start button for the countdown
-        startButton.addEventListener('click', async function () {
-            const endTime = new Date();
-            endTime.setSeconds(endTime.getSeconds() +
-                (days.valueAsNumber * 86400) +
-                (hours.valueAsNumber * 3600) +
-                (minutes.valueAsNumber * 60) +
-                seconds.valueAsNumber);
-            drawCanvasRemainingTime(endTime);
+        startButton.addEventListener('click', function () {
+            if (timerInterval) clearInterval(timerInterval);
+            paused = false;
+            const currentTime = new Date();
+            endTime = new Date(currentTime.getTime() + calculateRemainingTimeInSeconds() * 1000);
+            timerInterval = setInterval(() => { if (!paused) updateTimer(); }, 1000);
+            document.getElementById('pauseResumeButton').disabled = false;
         });
 
-        // Toggle Picture-in-Picture view
+        pauseResumeButton.addEventListener('click', function () {
+            paused = !paused;
+            if (!paused) {
+                const currentTime = new Date();
+                endTime = new Date(currentTime.getTime() + remainingTimeInSeconds * 1000);
+            }
+        });
+
         togglePipButton.addEventListener('click', async function () {
             if (document.pictureInPictureElement) {
                 document.exitPictureInPicture();
@@ -129,7 +133,25 @@
             event.pictureInPictureWindow.onresize = event => updateCanvasSize(event.target);
         });
 
-        function drawCanvasRemainingTime(endTime) {
+        function calculateRemainingTimeInSeconds() {
+            const days = document.getElementById('days').valueAsNumber || 0;
+            const hours = document.getElementById('hours').valueAsNumber || 0;
+            const minutes = document.getElementById('minutes').valueAsNumber || 0;
+            const seconds = document.getElementById('seconds').valueAsNumber || 0;
+            return (days * 86400) + (hours * 3600) + (minutes * 60) + seconds;
+        }
+
+        function updateTimer() {
+            const currentTime = new Date();
+            remainingTimeInSeconds = Math.floor((endTime - currentTime) / 1000);
+            if (remainingTimeInSeconds <= 0) {
+                clearInterval(timerInterval);
+                remainingTimeInSeconds = 0;
+            }
+            drawCanvasRemainingTime();
+        }
+
+        function drawCanvasRemainingTime() {
             const bgColor = document.getElementById('bgColor').value;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = bgColor;
@@ -139,23 +161,19 @@
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
 
-            // Display remaining time at the top
-            const secondsLeft = Math.floor((endTime - new Date()) / 1000);
-            const daysLeft = Math.floor(secondsLeft / 86400);
-            const hoursLeft = Math.floor((secondsLeft % 86400) / 3600);
-            const minutesLeft = Math.floor((secondsLeft % 3600) / 60);
-            const secondsRemaining = secondsLeft % 60;
+            const daysLeft = Math.floor(remainingTimeInSeconds / 86400);
+            const hoursLeft = Math.floor((remainingTimeInSeconds % 86400) / 3600);
+            const minutesLeft = Math.floor((remainingTimeInSeconds % 3600) / 60);
+            const secondsRemaining = remainingTimeInSeconds % 60;
 
             const timerFontSize = document.getElementById('timerFontSize').value;
             ctx.font = 'bold ' + timerFontSize + 'px sans-serif';
             const timeDisplay = `${daysLeft}d:${hoursLeft}h:${minutesLeft}m:${secondsRemaining}s`;
             ctx.fillText(timeDisplay, canvas.width / 2, canvas.height / 8);
 
-            // New line height
             const memoFontSize = document.getElementById('memoFontSize').value;
-            const lineHeight = memoFontSize * 1.2;  // Adjust line height based on font size
+            const lineHeight = memoFontSize * 1.2;
 
-            // Draw memo with word wrap and manual newline support
             const memoText = document.getElementById('memo').value;
             const memoLines = memoText.split('\n');
 
@@ -177,7 +195,6 @@
                         currentLine = word + ' ';
                         y += lineHeight;
 
-                        // Stop drawing text if the height limit is reached
                         if (y > canvas.height - 10) break;
                     } else {
                         currentLine = testLine;
@@ -189,14 +206,9 @@
                     y += lineHeight;
                 }
 
-                // Check if there's room for another line; if not, break
                 if (y > canvas.height - 10) {
                     break;
                 }
-            }
-
-            if (secondsLeft > 0) {
-                requestAnimationFrame(() => drawCanvasRemainingTime(endTime));
             }
         }
 
@@ -205,13 +217,12 @@
             canvas.height = pictureInPictureWindow.height * devicePixelRatio;
         }
 
-        // Save settings when they are modified
-        document.getElementById('memo').addEventListener('input', function () {
+        document.getElementById('memo').addEventListener('input', function() {
             localStorage.setItem('memoContent', this.value);
         });
 
         ['memoFontSize', 'timerFontSize', 'bgColor', 'days', 'hours', 'minutes', 'seconds'].forEach(id => {
-            document.getElementById(id).addEventListener('input', function () {
+            document.getElementById(id).addEventListener('input', function() {
                 localStorage.setItem(id, this.value);
             });
         });
